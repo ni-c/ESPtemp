@@ -1,0 +1,30 @@
+#include <IPAddress.h>
+
+// WiFi settings
+#define WLAN_SSID "MyWifi"
+#define WLAN_PASSWD "myWifiPassword"
+
+// Network settings
+IPAddress gateway(192, 168, 0, 1);
+IPAddress subnet(255, 255, 255, 0);
+IPAddress dns(192, 168, 0, 1);
+
+// MQTT broker settings
+#define MQTT_BROKER "192.168.0.10"
+#define MQTT_PORT 1883
+#define MQTT_USER "user"
+#define MQTT_PASSWORD "password"
+
+// MQTT client settings
+#define MQTT_CLIENT "esp-temperature-livingroom"
+#define MQTT_TOPIC "sensor/esp_temperature_livingroom"
+
+// Static IP of the ESPtemp
+IPAddress ip(192, 168, 0, 2);
+
+// #define HTU21DF_VCC_GPIO 12 /**< Override HTU21DF VCC PGI (Default: 15) */
+// #define OTA_ENABLE_GPIO 15 /**< Override OTA enable GPIO (Default: 14) */
+
+// #define SLEEPTIME 600e6 /**< Time in deepsleep (Default: 300e6 = 300 seconds)*/
+// #define DEBUG 1 /**< Set to 1 to debug over serial (Default: 0)*/
+// #define OTA 0 /**< Set to 1 to enable OTA waiting loop (Default: 1)*/
