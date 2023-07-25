@@ -18,7 +18,7 @@ The device uses an ESP-12F microcontroller to process and transmit the data. Tem
 - [Battery Holder](https://aliexpress.com/item/1005005254487864.html)
 - 1N4007 Diode
 - 12 kΩ Resistor *(5 pieces)*
-- 68 kΩ Resitor
+- 68 kΩ Resistor
 - 220 kΩ Resistor
 - 1000 µF Electrolyte capacitor
 - 100 µF Ceramic capacitor *(2 pieces)*
