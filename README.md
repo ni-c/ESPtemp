@@ -2,11 +2,13 @@
 
 Battery powered ESP8266 controlled temperature and humidity sensor communicating via MQTT protocol (with Home Assistant).
 
-![ESPTemp v1.0](doc/esptemp.jpg)
+![ESPTemp v1.0 with case](doc/cover.jpg)
 
 ESPtemp is a battery-powered device that detects temperature and humidity and transmits them to a server (like [Home Assistant](https://www.home-assistant.io/)) via WiFi using [MQTT](https://mqtt.org/). It measures the current temperature, humidity and battery voltage, transmits them and then goes into deep sleep for 5 minutes to save energy. After that, the process is repeated. To make the connection to the WiFi as fast as possible, the WiFi channel and the MAC address of the router are stored in the RTC memory of the microcotroller and used to speed up the next connection attempt.
 
 The device uses an ESP-12F microcontroller to process and transmit the data. Temperature and humidity are measured by a HTU21D sensor. The required operating voltage of 3.3V for the MCU and the sensor is provided by a MCP1700-3302E low dropout voltage regulator. The power supply is a lithium-ion battery type 18650 with 3.7V and 3500mAh. The protection of the circuit and the lithium-ion battery is ensured by a 200mA fine-wire fuse. The circuit is built on a double-sided prototype PCB board for ESP8266 and ESP32.
+
+![ESPTemp v1.0 without case](doc/esptemp.jpg)
 
 ### Part list
 
