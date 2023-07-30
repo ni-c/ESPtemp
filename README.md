@@ -23,8 +23,8 @@ The device uses an ESP-12F microcontroller to process and transmit the data. Tem
 - 68 kΩ Resistor
 - 220 kΩ Resistor
 - 1000 µF Electrolyte capacitor
-- 100 µF Ceramic capacitor *(2 pieces)*
-- 1 µF Ceramic capacitor
+- 100 nF Ceramic capacitor *(2 pieces)*
+- 1 nF Ceramic capacitor
 - Micro push button switch (4 pin)
 - Jumper connectors
 - 200 mA Fuse
