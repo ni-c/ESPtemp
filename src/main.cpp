@@ -23,6 +23,10 @@
 #define D_timestamp()
 #endif
 
+#ifndef ESPTEMP_VERSION
+#define ESPTEMP_VERSION "v1.1" /**< The current version of the ESPtemp firmware*/
+#endif
+
 #ifndef OTA_ENABLE_GPIO
 #define OTA_ENABLE_GPIO 14 /**< Connect this GPIO Pin to VCC to enter OTA wait loop after reset */
 #endif
@@ -39,11 +43,9 @@
 #define DEBUG 0 /**< Set to 1 to debug over serial */
 #endif
 
-
 #ifndef OTA
 #define OTA 1 /**< Set to 1 to enable OTA waiting loop */
 #endif
-
 
 unsigned long startMillis;
 
@@ -352,6 +354,7 @@ void loop()
         doc["humidity"] = (int)roundf(10 * humidity) / 10.0;
         doc["batteryVoltage"] = (int)roundf(100 * batteryVoltage) / 100.0;
         doc["batteryPercentage"] = batteryPercentage;
+        doc["firmwareVersion"] = ESPTEMP_VERSION;
 
         char json[128];
         serializeJson(doc, json);
