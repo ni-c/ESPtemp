@@ -39,6 +39,10 @@
 #define SLEEPTIME 300e6 /**< Time in deepsleep */
 #endif
 
+#ifndef SLEEPTIME_EXTENDED
+#define SLEEPTIME_EXTENDED 21600e6 /**< Time in deepsleep if an error occured while trying to connect to wifi (to avoid battery drainage) */
+#endif
+
 #ifndef DEBUG
 #define DEBUG 0 /**< Set to 1 to debug over serial */
 #endif
@@ -62,6 +66,7 @@ bool isHTU21DFready = false;
 bool isADCReady = false;
 bool isWifiStarted = false;
 bool isWifiReady = false;
+bool isRegularWifi = false;
 bool isMQTTStarted = false;
 bool isMQTTReady = false;
 bool isRtcValid = false;
@@ -245,6 +250,7 @@ void loop()
             D_timestamp();
             D_println("RTC OK, initiate quick connection");
             WiFi.begin(WLAN_SSID, WLAN_PASSWD, rtcData.channel, rtcData.ap_mac, true);
+            isRegularWifi = false;
         }
         else
         {
@@ -252,6 +258,7 @@ void loop()
             D_timestamp();
             D_println("RTC BAD, initiate regular connection");
             WiFi.begin(WLAN_SSID, WLAN_PASSWD);
+            isRegularWifi = true;
         }
 
         isWifiStarted = true;
@@ -284,7 +291,7 @@ void loop()
 
     /*
      * Step 4:
-     * If WiFi is ready: Initialize MQTT client 
+     * If WiFi is ready: Initialize MQTT client
      * OR
      * Start OTA waiting loop if OTA_ENABLE_GPIO is pulled HIGH
      */
@@ -307,19 +314,28 @@ void loop()
                 ArduinoOTA.begin();
             }
         }
-        else if ((millis() - startMillis) > 5000)
+        else if (((millis() - startMillis) > 5000) && (!isRegularWifi))
         {
             // Try regular connection
             D_timestamp();
-            D_println("WiFi timeout, retrying");
+            D_println("WiFi timeout, retrying regular connection");
             WiFi.disconnect();
-            delay(10);
+            delay(5);
             WiFi.forceSleepBegin();
             delay(1);
             WiFi.forceSleepWake();
             delay(1);
             WiFi.begin(WLAN_SSID, WLAN_PASSWD);
             isRtcValid = false;
+            isRegularWifi = true;
+        }
+        else if ((millis() - startMillis) > 20000)
+        {
+            // Wifi connection failed, go to extended sleep
+            WiFi.disconnect(true);
+            D_timestamp();
+            D_println("Connection to WiFi failed, going to extended sleep");
+            ESP.deepSleep(SLEEPTIME_EXTENDED, WAKE_RF_DISABLED);
         }
     }
     /*
@@ -375,9 +391,9 @@ void loop()
     if (!isOTAEnabled)
     {
         /*
-        * Step 6:
-        * Save WiFi data to RTC and go to deep sleep again
-        */
+         * Step 6:
+         * Save WiFi data to RTC and go to deep sleep again
+         */
         if (isMQTTReady)
         {
             // Write current connection info to RTC
@@ -395,7 +411,7 @@ void loop()
             D_println("DONE, going to sleep");
             ESP.deepSleep(SLEEPTIME, WAKE_RF_DISABLED);
         }
-        else if ((millis() - startMillis) > 15000)
+        else if ((millis() - startMillis) > 25000)
         {
             WiFi.disconnect(true);
             D_timestamp();
@@ -404,8 +420,8 @@ void loop()
         }
     }
     /*
-    * OTA wait loop
-    */
+     * OTA wait loop
+     */
     else
     {
 #if OTA
