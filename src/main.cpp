@@ -8,7 +8,7 @@
 #include "config.h"
 
 #ifndef ESPTEMP_VERSION
-#define ESPTEMP_VERSION "v1.2" /**< The current version of the ESPtemp firmware*/
+#define ESPTEMP_VERSION "v1.1" /**< The current version of the ESPtemp firmware*/
 #endif
 
 #ifndef OTA_ENABLE_GPIO
