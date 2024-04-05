@@ -7,24 +7,8 @@
 
 #include "config.h"
 
-#if DEBUG
-#define D_SerialBegin(...) Serial.begin(__VA_ARGS__)
-#define D_print(...) Serial.print(__VA_ARGS__)
-#define D_write(...) Serial.write(__VA_ARGS__)
-#define D_println(...) Serial.println(__VA_ARGS__)
-#define D_printf(...) Serial.printf(__VA_ARGS__)
-#define D_timestamp() Serial.printf("[%lu] ", millis())
-#else
-#define D_SerialBegin(bauds)
-#define D_print(...)
-#define D_write(...)
-#define D_println(...)
-#define D_printf(...)
-#define D_timestamp()
-#endif
-
 #ifndef ESPTEMP_VERSION
-#define ESPTEMP_VERSION "v1.1" /**< The current version of the ESPtemp firmware*/
+#define ESPTEMP_VERSION "v1.2" /**< The current version of the ESPtemp firmware*/
 #endif
 
 #ifndef OTA_ENABLE_GPIO
@@ -49,6 +33,22 @@
 
 #ifndef OTA
 #define OTA 1 /**< Set to 1 to enable OTA waiting loop */
+#endif
+
+#if DEBUG
+#define D_SerialBegin(...) Serial.begin(__VA_ARGS__)
+#define D_print(...) Serial.print(__VA_ARGS__)
+#define D_write(...) Serial.write(__VA_ARGS__)
+#define D_println(...) Serial.println(__VA_ARGS__)
+#define D_printf(...) Serial.printf(__VA_ARGS__)
+#define D_timestamp() Serial.printf("[%lu] ", millis())
+#else
+#define D_SerialBegin(bauds)
+#define D_print(...)
+#define D_write(...)
+#define D_println(...)
+#define D_printf(...)
+#define D_timestamp()
 #endif
 
 unsigned long startMillis;
