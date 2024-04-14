@@ -61,9 +61,10 @@ uint_fast16_t adcValue;
 char error[15];
 
 uint8_t wifiRetries = 0;
+uint_fast16_t i = 0;
 
 bool isHTU21DFready = false;
-bool isADCReady = false;
+bool isBatteryVoltageReady = false;
 bool isWifiStarted = false;
 bool isWifiReady = false;
 bool isRegularWifi = false;
@@ -110,6 +111,28 @@ uint32_t calculateCRC32(const uint8_t *data, size_t length)
     }
 
     return crc;
+}
+
+// Read the battery voltage from the ADC
+float readBatteryVoltage(void)
+{
+    adcValue = analogRead(A0);
+    batteryVoltage = adcValue * 0.004;
+    batteryPercentage = (int8_t)((adcValue - 863) / 1.6);
+
+    if (batteryVoltage <= 3.3)
+    {
+        D_timestamp();
+        D_println("Battery low. Going to long deep sleep. Good night.");
+        ESP.deepSleep(0);
+    }
+
+    D_timestamp();
+    D_println("ADC Reading ready");
+    D_timestamp();
+    D_printf("Battery voltage: %.1f V, Battery Percentage: %i", batteryVoltage, batteryPercentage);
+    D_println();
+    return batteryVoltage;
 }
 
 void setup()
@@ -268,25 +291,10 @@ void loop()
      * Step 3:
      * Read battery voltage from ADC
      */
-    if (!isADCReady)
+    if (!isBatteryVoltageReady)
     {
-        adcValue = analogRead(A0);
-        isADCReady = true;
-        batteryVoltage = adcValue * 0.004;
-        batteryPercentage = (int8_t)((adcValue - 863) / 1.6);
-
-        if (batteryVoltage <= 3.3)
-        {
-            D_timestamp();
-            D_println("Battery low. Going to long deep sleep. Good night.");
-            ESP.deepSleep(0);
-        }
-
-        D_timestamp();
-        D_println("ADC Reading ready");
-        D_timestamp();
-        D_printf("Battery voltage: %.1f V, Battery Percentage: %i", batteryVoltage, batteryPercentage);
-        D_println();
+        isBatteryVoltageReady = true;
+        readBatteryVoltage();
     }
 
     /*
@@ -434,6 +442,14 @@ void loop()
         {
             ledState = LOW;
         }
+
+        // Protect battery 
+        i++;
+        if (i == 1024) {
+            i = 0;
+            readBatteryVoltage();
+        }
+
         digitalWrite(LED_BUILTIN, ledState);
         ArduinoOTA.handle();
 #endif
