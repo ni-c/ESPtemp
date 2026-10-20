@@ -26,5 +26,6 @@ IPAddress ip(192, 168, 0, 2);
 // #define OTA_ENABLE_GPIO 15 /**< Override OTA enable GPIO (Default: 14) */
 
 // #define SLEEPTIME 600e6 /**< Time in deepsleep (Default: 300e6 = 300 seconds)*/
+// #define BACKOFF_MAX_SLEEPTIME 3600e6 /**< Longest wait between attempts while WiFi or MQTT fails (Default: 7200e6 = 2 hours)*/
 // #define DEBUG 1 /**< Set to 1 to debug over serial (Default: 0)*/
 // #define OTA 0 /**< Set to 1 to enable OTA waiting loop (Default: 1)*/
