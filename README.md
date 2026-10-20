@@ -56,6 +56,23 @@ The firmware is written in C++ using [Visual Studio Code](https://code.visualstu
 
 > ⚠️ Before building the firmware be sure to copy the file `include\config.h.example` to `include/config.h` and change the WiFi and MQTT credentials as well as the other settings in the new file.
 
+### Without WiFi or MQTT
+
+When the device cannot connect to the WiFi, or the MQTT broker does not answer, it counts the failed attempt in RTC memory and waits longer before the next one: 10, 20, 40 and 80 minutes, then every 2 hours (`BACKOFF_MAX_SLEEPTIME`). The first successful transmission returns to the normal 5 minutes and reports the number of failed attempts before it as `connectFailures`. A connection the access point refuses outright (unknown SSID, wrong password) is given up at once instead of after the 20-second timeout.
+
+The wait is made of single 5-minute deep sleeps: a wake that only counts down keeps the radio off and goes back to sleep right away. A single long deep sleep is not used, because the ESP8266 cannot sleep longer than `ESP.deepSleepMax()`, about 3.5 hours.
+
+### Tests
+
+The firmware runs on the build machine against small fakes of the Arduino core and the libraries (`test/support/fakes`), so the tests drive the real `setup()` and `loop()`:
+
+```sh
+pio test -e native
+gcovr --root . --filter src/ --filter lib/ --exclude-throw-branches --print-summary
+```
+
+CI requires 90 % line and 80 % branch coverage.
+
 ### Flash via serial connection
 
 Connect RX, TX and GND to your serial interface or [USB-to-TTL converter](https://aliexpress.com/item/32531899568.html). To [enter flash mode on the ESP-12F](https://lukelogbook.tech/2018/02/08/flash-code-to-esp8266-esp-12-module-step-by-step-guide/) you must connect **GPIO0** to **GND** and reset the MCU.

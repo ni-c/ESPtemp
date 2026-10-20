@@ -4,11 +4,13 @@
 #include <ArduinoOTA.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
+#include <backoff.h>
 
 #include "config.h"
+#include "rtc_data.h"
 
 #ifndef ESPTEMP_VERSION
-#define ESPTEMP_VERSION "v1.1" /**< The current version of the ESPtemp firmware*/
+#define ESPTEMP_VERSION "v1.2" /**< The current version of the ESPtemp firmware*/
 #endif
 
 #ifndef OTA_ENABLE_GPIO
@@ -23,8 +25,8 @@
 #define SLEEPTIME 300e6 /**< Time in deepsleep */
 #endif
 
-#ifndef SLEEPTIME_EXTENDED
-#define SLEEPTIME_EXTENDED 21600e6 /**< Time in deepsleep if an error occured while trying to connect to wifi (to avoid battery drainage) */
+#ifndef BACKOFF_MAX_SLEEPTIME
+#define BACKOFF_MAX_SLEEPTIME 7200e6 /**< Longest wait between two attempts while connecting to WiFi or MQTT keeps failing */
 #endif
 
 #ifndef DEBUG
@@ -58,9 +60,7 @@ float temperature;
 float batteryVoltage;
 int8_t batteryPercentage;
 uint_fast16_t adcValue;
-char error[15];
 
-uint8_t wifiRetries = 0;
 uint_fast16_t i = 0;
 
 bool isHTU21DFready = false;
@@ -80,12 +80,7 @@ Adafruit_HTU21DF htu = Adafruit_HTU21DF();
 WiFiClient wifiClient;
 PubSubClient pubSubclient(wifiClient);
 
-struct
-{
-    uint32_t crc32;    // 4 bytes
-    uint8_t channel;   // 1 byte,   5 in total
-    uint8_t ap_mac[6]; // 6 bytes, 11 in total
-} rtcData;
+RtcData rtcData;
 
 // the CRC routine
 uint32_t calculateCRC32(const uint8_t *data, size_t length)
@@ -118,7 +113,9 @@ float readBatteryVoltage(void)
 {
     adcValue = analogRead(A0);
     batteryVoltage = adcValue * 0.004;
-    batteryPercentage = (int8_t)((adcValue - 863) / 1.6);
+    // ADC 863 (3.45 V) is empty, 1023 (4.1 V) is full; integer maths, so full is exactly 100
+    int_fast32_t percentage = ((int_fast32_t)adcValue - 863) * 10 / 16;
+    batteryPercentage = (int8_t)(percentage < 0 ? 0 : (percentage > 100 ? 100 : percentage));
 
     if (batteryVoltage <= 3.3)
     {
@@ -135,8 +132,55 @@ float readBatteryVoltage(void)
     return batteryVoltage;
 }
 
+// Read the RTC data; anything that fails its CRC counts as a first boot
+void readRtc(void)
+{
+    bool isRtcReadable = ESP.rtcUserMemoryRead(0, (uint32_t *)&rtcData, sizeof(rtcData));
+    // Skip the first 4 bytes, that's the checksum itself
+    if (!isRtcReadable || calculateCRC32(((uint8_t *)&rtcData) + 4, sizeof(rtcData) - 4) != rtcData.crc32)
+    {
+        memset(&rtcData, 0, sizeof(rtcData));
+    }
+    isRtcValid = rtcData.apValid;
+}
+
+void writeRtc(void)
+{
+    rtcData.crc32 = calculateCRC32(((uint8_t *)&rtcData) + 4, sizeof(rtcData) - 4);
+    ESP.rtcUserMemoryWrite(0, (uint32_t *)&rtcData, sizeof(rtcData));
+}
+
+// Count the failed attempt and wait longer before the next one (see backoff.h)
+void sleepAfterFailure(const char *reason)
+{
+    if (rtcData.failures < 255)
+    {
+        rtcData.failures++;
+    }
+    rtcData.sleepsLeft = backoffSleeps(rtcData.failures, backoffCap(BACKOFF_MAX_SLEEPTIME, SLEEPTIME)) - 1;
+    writeRtc();
+
+    WiFi.disconnect(true);
+    D_timestamp();
+    D_printf("%s (%u failed attempts), next attempt in %u periods\n", reason, rtcData.failures, rtcData.sleepsLeft + 1);
+    ESP.deepSleep(SLEEPTIME, WAKE_RF_DISABLED);
+}
+
 void setup()
 {
+    // Every wake from deep sleep is a fresh boot
+    isHTU21DFready = false;
+    isBatteryVoltageReady = false;
+    isWifiStarted = false;
+    isWifiReady = false;
+    isRegularWifi = false;
+    isMQTTStarted = false;
+    isMQTTReady = false;
+    isRtcValid = false;
+    isOTAEnabled = false;
+    ledState = HIGH;
+    i = 0;
+
     D_SerialBegin(115200);
 
     // internal LED off
@@ -154,6 +198,24 @@ void setup()
     D_print("MAC Address: ");
     D_println(WiFi.macAddress());
 
+    readRtc();
+
+#if OTA
+    pinMode(OTA_ENABLE_GPIO, INPUT);
+    isOTAEnabled = (digitalRead(OTA_ENABLE_GPIO) == HIGH);
+#endif
+
+    // Sit out the wait after failed attempts one sleep period at a time: a single long
+    // deep sleep can exceed ESP.deepSleepMax(). OTA mode never waits.
+    if (rtcData.sleepsLeft > 0 && !isOTAEnabled)
+    {
+        rtcData.sleepsLeft--;
+        writeRtc();
+        D_timestamp();
+        D_printf("Waiting after failed attempts, %u periods left\n", rtcData.sleepsLeft);
+        ESP.deepSleep(SLEEPTIME, WAKE_RF_DISABLED);
+    }
+
     // enable HTU21DF_VCC
     pinMode(HTU21DF_VCC_GPIO, OUTPUT);
     digitalWrite(HTU21DF_VCC_GPIO, HIGH);
@@ -161,16 +223,6 @@ void setup()
 
     // Wait minimum sampling period
     startMillis = millis();
-
-    if (ESP.rtcUserMemoryRead(0, (uint32_t *)&rtcData, sizeof(rtcData)))
-    {
-        // Calculate the CRC of what we just read from RTC memory, but skip the first 4 bytes as that's the checksum itself.
-        uint32_t crc = calculateCRC32(((uint8_t *)&rtcData) + 4, sizeof(rtcData) - 4);
-        if (crc == rtcData.crc32)
-        {
-            isRtcValid = true;
-        }
-    }
 
 #if OTA
 #if DEBUG
@@ -205,8 +257,6 @@ void setup()
         else if (error == OTA_END_ERROR)
             D_println("End Failed"); });
 #endif
-    pinMode(OTA_ENABLE_GPIO, INPUT);
-    isOTAEnabled = (digitalRead(OTA_ENABLE_GPIO) == HIGH);
     if (isOTAEnabled)
     {
         D_timestamp();
@@ -305,7 +355,8 @@ void loop()
      */
     if (!isWifiReady)
     {
-        if (WiFi.status() == WL_CONNECTED)
+        wl_status_t wifiStatus = WiFi.status();
+        if (wifiStatus == WL_CONNECTED)
         {
             D_timestamp();
             D_print("WiFi connected (");
@@ -321,6 +372,11 @@ void loop()
                 ArduinoOTA.setHostname(MQTT_CLIENT);
                 ArduinoOTA.begin();
             }
+        }
+        else if (isRegularWifi && (wifiStatus == WL_NO_SSID_AVAIL || wifiStatus == WL_CONNECT_FAILED || wifiStatus == WL_WRONG_PASSWORD))
+        {
+            // No point in waiting for the timeout
+            sleepAfterFailure("WiFi connection refused");
         }
         else if (((millis() - startMillis) > 5000) && (!isRegularWifi))
         {
@@ -339,11 +395,7 @@ void loop()
         }
         else if ((millis() - startMillis) > 20000)
         {
-            // Wifi connection failed, go to extended sleep
-            WiFi.disconnect(true);
-            D_timestamp();
-            D_println("Connection to WiFi failed, going to extended sleep");
-            ESP.deepSleep(SLEEPTIME_EXTENDED, WAKE_RF_DISABLED);
+            sleepAfterFailure("Connection to WiFi failed");
         }
     }
     /*
@@ -379,8 +431,9 @@ void loop()
         doc["batteryVoltage"] = (int)roundf(100 * batteryVoltage) / 100.0;
         doc["batteryPercentage"] = batteryPercentage;
         doc["firmwareVersion"] = ESPTEMP_VERSION;
+        doc["connectFailures"] = rtcData.failures;
 
-        char json[128];
+        char json[192];
         serializeJson(doc, json);
 
         D_timestamp();
@@ -394,25 +447,27 @@ void loop()
         delay(10);
 
         isMQTTReady = true;
+
+        // Connected: forget the failures and save the access point for a quick connection
+        if (!isRtcValid)
+        {
+            rtcData.channel = WiFi.channel();
+            memcpy(rtcData.ap_mac, WiFi.BSSID(), 6); // Copy 6 bytes of BSSID (AP's MAC address)
+            rtcData.apValid = 1;
+        }
+        rtcData.failures = 0;
+        rtcData.sleepsLeft = 0;
+        writeRtc();
     }
 
     if (!isOTAEnabled)
     {
         /*
          * Step 6:
-         * Save WiFi data to RTC and go to deep sleep again
+         * Go to deep sleep again
          */
         if (isMQTTReady)
         {
-            // Write current connection info to RTC
-            if (!isRtcValid)
-            {
-                rtcData.channel = WiFi.channel();
-                memcpy(rtcData.ap_mac, WiFi.BSSID(), 6); // Copy 6 bytes of BSSID (AP's MAC address)
-                rtcData.crc32 = calculateCRC32(((uint8_t *)&rtcData) + 4, sizeof(rtcData) - 4);
-                ESP.rtcUserMemoryWrite(0, (uint32_t *)&rtcData, sizeof(rtcData));
-            }
-
             WiFi.disconnect(true);
 
             D_timestamp();
@@ -421,10 +476,8 @@ void loop()
         }
         else if ((millis() - startMillis) > 25000)
         {
-            WiFi.disconnect(true);
-            D_timestamp();
-            D_println("TIMEOUT, going to sleep");
-            ESP.deepSleep(SLEEPTIME, WAKE_RF_DISABLED);
+            // WiFi is up, but the MQTT broker does not answer
+            sleepAfterFailure("TIMEOUT");
         }
     }
     /*
